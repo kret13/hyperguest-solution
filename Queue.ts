@@ -1,25 +1,52 @@
-import {  Message } from "./Database";
+import { Message } from "./Database"
+
+type MessageId = string
+type WorkerId = number
 
 export class Queue {
-    private messages: Message[]
+  private messages = new Map<MessageId, Message>()
+  private processing = new Map<MessageId, WorkerId>()
 
-    constructor() {
-        this.messages = []
+  Enqueue(message: Message): void {
+    this.messages.set(message.id, message)
+  }
+
+  Dequeue(workerId: WorkerId): Message | undefined {
+    for (const [messageId, message] of this.messages.entries()) {
+      if (this.isLocked(message)) continue
+      this.lock(messageId, workerId)
+      return message
+    }
+    return undefined
+  }
+
+  Confirm(workerId: WorkerId, messageId: MessageId): void {
+    if (this.processing.get(messageId) !== workerId) {
+      console.error(
+        `Worker ${workerId} tried to confirm message ${messageId}, but does not own it.`
+      )
+      return
     }
 
-    Enqueue = (message: Message) => {
-        this.messages.push(message)
-    }
+    this.messages.delete(messageId)
+    this.processing.delete(messageId)
+  }
 
-    Dequeue = (workerId: number): Message | undefined => {
-        return this.messages.splice(0,1)[0]
-    }
+  Size(): number {
+    return this.messages.size
+  }
 
-    Confirm = (workerId: number, messageId: string) => {
-
+  private isLocked(message: Message): boolean {
+    for (const lockedId of this.processing.keys()) {
+      const lockedMessage = this.messages.get(lockedId)
+      if (lockedMessage?.key === message.key) {
+        return true
+      }
     }
+    return false
+  }
 
-    Size = () => {
-        return this.messages.length
-    }
+  private lock(messageId: MessageId, workerId: WorkerId): void {
+    this.processing.set(messageId, workerId)
+  }
 }
